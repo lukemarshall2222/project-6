@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+   <head>
+      <title>ACP Controle Times</title>
+      <meta charset="utf-8">
+      <!-- 'viewport' is used by bootstrap to respond to device size -->
+      <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+      <!-- Bootstrap includes javascript and css  (must follow jquery) -->
+      <link
+         rel="stylesheet"
+         href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css"
+         integrity="sha384-B0vP5xmATw1+K9KRQjQERJvTumQW0nPEzvF6L/Z6nronJ3oUOFUFpCjEUQouq2+l"
+         crossorigin="anonymous">
+      <!-- Javascript:  JQuery from a content distribution network (CDN) -->
+      <script
+         src="https://code.jquery.com/jquery-3.5.1.min.js"
+         integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0="
+         crossorigin="anonymous"></script>
+      <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"
+         integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN"
+         crossorigin="anonymous"></script>
+      <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/js/bootstrap.min.js"
+         integrity="sha384-+YQ4JLhjyBLPDQt//I+STsc9iw4uQqACwlvpslubQzn4u2UU2UFM80nGisd026JF"
+         crossorigin="anonymous"></script>
+      <!-- moment.js is the JavaScript equivalent of arrow.py -->
+      <script
+      src="{{ url_for('static', filename="js/moment.min.js") }}"></script>
+   </head>
+   <!-- Our own stylesheet -->
+   <link rel="stylesheet" href="/static/css/calc.css" />
+   <body>
+      <div class="container">
+         <h1>ACP Brevet Times</h1>
+         <p>This worksheet is for ACP-sanctioned brevets between 200 and 1000 kilometers.</p>
+         <!--
+            If there are any warnings or other messages from a prior
+            request to the server,
+            they appear above the rest of the content, just until the next
+            action.  (This is only on request/response transactions that
+            result in regenerating the page, not on every request.)
+            -->
+         {% with messages = get_flashed_messages() %}
+         {% if messages %}
+         <ul class="flashes">
+            {% for message in messages %}
+            <li>{{ message }}</li>
+            {% endfor %}
+         </ul>
+         {% endif %}
+         {% endwith %}
+         <!-- Design on bootstrap grid -->
+         <form role="form">
+            <div class="row">
+               <div class="col-md-4">
+                  <label>Distance</label>
+                  <select name="distance" id="brevet_dist_km">
+                     <option value="200">200km</option>
+                     <option value="300">300km</option>
+                     <option value="400">400km</option>
+                     <option value="600">600km</option>
+                     <option value="1000">1000km</option>
+                  </select>
+               </div>
+               <!-- columns 1 to 4  -->
+               <div class="col-md-6">
+                  <label>Begins at</label>
+                  <input type="datetime-local" name="begin_date" id="begin_date" value="2021-01-01T00:00" />
+               </div>
+               <!-- columns 5 to 10 -->
+               <div class="col-md-10">
+                  <button id="insert">Submit</button>
+                  <button id="fetch">Display</button>
+              </div>
+            </div>
+            <!-- row -->
+            <br />  <!-- a little vertical space -->
+            <!-- Although we do not use tables for general page layout, they are
+               appropriate for something that really is a table, like this
+               one.  We allocate it the full 12 columns of the bootstrap grid.
+               -->
+            <div class="row">
+               <div class="col-md-12">
+                  <table class="control_time_table">
+                     <tr>
+                        <th> Miles </th>
+                        <th> Km </th>
+                        <th>Location</th>
+                        <th>Open</th>
+                        <th>Close</th>
+                        <th>Notes</th>
+                     </tr>
+                     {% for row in range(20) %}
+                     <tr class="control">
+                        <!-- Dist (mi) -->
+                        <td><input name="miles" type="number" step="0.00001"
+                           min="0" max="900" /></td>
+                        <!-- Dist (km) -->
+                        <td><input name="km" type="number" step="0.00001"
+                           min="0" max="1100" /> </td>
+                        <!-- Location (optional) -->
+                        <td><input name="location" type="text"
+                           placeholder="Optional location name"
+                           size="20" /> </td>
+                        <!-- Open time (read only, set by JavaScript function -->
+                        <td><input name="open" type="datetime-local" readonly value="" /></td>
+                        <!-- Close time (read only, set by JavaScript function -->
+                        <td><input name="close" type="datetime-local" readonly value="" /></td>
+                        <!-- Notes (error messages for this row) -->
+                        <td class="notes"> &nbsp; </td>
+                     </tr>
+                     {% endfor %}
+                  </table>
+               </div>
+               <!-- col -->
+            </div>
+            <!-- row -->
+         </form>
+         <script type="text/javascript">
+            var SCRIPT_ROOT = {{ request.script_root|tojson|safe }} ;
+            var TIME_CALC_URL = SCRIPT_ROOT + "/_calc_times";
+            // added paths for db functionality
+            var GET_URL = SCRIPT_ROOT + "/fetch";
+            var SAVE_URL = SCRIPT_ROOT + "/insert";
+
+            $(document).ready(function() {
+               $('.control').on('input', function() {
+                  var control = $(this).closest('.control');
+                  calc_times(control);
+
+               $('input[name="miles"]').change(
+                  function() {
+                     var miles = parseFloat($(this).val());
+                     var control_dist = (1.609344 * miles).toFixed(6) ;
+                     console.log("Converted " + miles + " miles to " + control_dist + " kilometers");
+                     var control_entry = $(this).parents(".control")
+                     var target = control_entry.find("input[name='km']");
+                     target.val( control_dist );
+                     // Then calculate times for this entry
+                     calc_times(control_entry);
+                  });
+
+               $('input[name="km"]').change(
+                  function() {
+                     var control_dist = parseFloat($(this).val());
+                     var miles = (0.621371 * control_dist).toFixed(6) ;
+                     console.log("Converted " + control_dist + " km to " + miles + " miles");
+                     var control_entry = $(this).parents(".control")
+                     var target = control_entry.find("input[name='miles']");
+                     target.val( miles );
+                     // Then calculate times for this entry
+                     calc_times(control_entry);
+                  });
+               });
+            });
+
+            function calc_times(control) {
+            // retrieve the values from the page to send to the server
+              var control_dist = control.find("input[name='km']").val();
+              console.log(control_dist);
+              var total_dist = $("#brevet_dist_km").val();
+              console.log(total_dist);
+              var begin_date = $("#begin_date").val();
+              console.log(begin_date);
+            // set the path to the open and close fields to make setting them later easy 
+              var open_time_field = control.find("input[name='open']");
+              var close_time_field = control.find("input[name='close']");
+
+              $.getJSON(TIME_CALC_URL, {control_dist: control_dist, total_dist: total_dist, time: begin_date}).done(
+                function(data) {
+                  // retrieve the object sent back by the server, contains calculated open and close times
+                   var times = data.result;
+                   console.log("Got a response: ");
+                   console.log("Response.open = " + times.open);
+                   // automatically fills the open and close slots
+                   open_time_field.val(moment(times.open).format("YYYY-MM-DDTHH:mm"));
+                   close_time_field.val(moment(times.close).format("YYYY-MM-DDTHH:mm"));
+                 }
+               ).fail(function(err){
+                 // In case you get an error...
+                 console.log("Error!");
+                 console.log(err);
+               });
+            }
+
+               $(document).ready(function(){
+                // Do the following when the page is finished loading
+                  var failed = false
+                // Insert event
+                $('#insert').click(
+                    function(event) {
+                        event.preventDefault();
+                        // Referencing by tag type (input) and attribute (name)
+                        // Notice the difference between this and referencing by class (.)
+                        // and referencing by id (#).
+                        var brevet_dist = $("#brevet_dist_km").val();
+
+                        var datetime = $("#begin_date").val(); 
+
+                        // Empty array of list items that we will fill with a for loop
+                        var controls = [];
+                        // For every row (go to line 52 and see ways to reference rows: by tag (tr) or
+                        // by class (listitem). Class is better because it's more specific in this case.
+                        // And we don't want to accidentally pick up the table header row.
+                        $('.control').each(function() {
+                            // Find the row object
+                            var control_data = $(this);
+                            // In this row, find description and priority
+                            var dist = control_data.find("input[name='km']").val();
+                            var open = control_data.find("input[name='open']").val();
+                            var close = control_data.find("input[name='close']").val();
+                            // Clear existing values
+                            control_data.find("input[name='km']").val('');
+                            control_data.find("input[name='open']").val('');
+                            control_data.find("input[name='close']").val('');
+                            control_data.find("input[name='miles']").val('');
+                            // If not empty, append to our list.
+                            if (dist) {
+                              try { // throw error if no controls set
+                                 brevet_num = parseInt(brevet_dist)
+                                 if (parseInt(dist) > (brevet_num += (brevet_num * 0.2))) {
+                                    failed = true
+                                    throw new Error(`control distance ${dist} out of bounds`)
+                                 }
+                              } catch (error) {
+                                 console.error(error)
+                              }
+                                // Construct a dictionary
+                                item_json = {
+                                    "distance": dist, 
+                                    "open_time": open,
+                                    "close_time": close 
+                                }
+                                // Push to list
+                                controls.push(item_json);
+                            }
+                        });
+                        try { // throw error if no controls set
+                           if (controls.length == 0) {
+                              failed = true
+                              throw new Error("cannot submit empty controls.")
+                           }
+                        } catch (error) {
+                           console.error(error)
+                        }
+
+                        try { // throw error if start time not set
+                           if (!datetime) {
+                              failed = true
+                              throw new Error("cannot submit with empty start time.")
+                           }
+                        } catch (error) {
+                           console.error(error)
+                        }
+
+                        // Construct the data we will be sending Flask
+                        var new_control_list = {
+                            "brevet_dist": brevet_dist, 
+                            "datetime": datetime,
+                            "controls": controls
+                           };
+                        // Perfect! Now we have all the information that the user's entered
+                        // into the form. All we have to do is send a POST request to have
+                        // the backend store it in the database!
+                        if (!failed) {
+                           $.ajax({
+                           // Expect JSON responses from our backend
+                           dataType: 'json', // expected output format (getJSON sets this as well)
+                           // Specify we're sending JSON as well
+                           contentType: "application/json",
+                           // Request method: POST
+                           type: 'POST',
+                           // URL: specified above
+                           url: SAVE_URL,
+                           // Important step that we didn't use to do in P4:
+                           // Convert our constructed dictionary to a JSON string!
+                           data: JSON.stringify(new_control_list),
+                           // On a successful response from flask:
+                           success: function(data) {
+                                 // Check the status code we set in Flask
+                                 // Recall: 1 was success, 0 was failure
+                                 if (data.status == 1 && !failed) {
+                                    console.log("Successfully inserted! Response: ", data);
+                                 }
+                                 else {
+                                    console.log("Insertion failed: ", data);
+                                 }
+                              },
+                           // On error
+                           error: function(err){
+                              console.log("Error: ", err); }
+                           });}
+                           else { console.log("Insertion failed.")}
+                    }
+                );
+
+              // On error
+
+                $('#fetch').click(
+                    function(event) {
+                        event.preventDefault();
+                        // We use getJSON because we're sending a GET request.
+                        // getJSON is essentially running $.ajax as well, but sets the defaults for us.
+                        // So we're just using it for convenience.
+                        // Feel free to replace it with a $.ajax call like the one in #insert.
+                        $.getJSON(GET_URL /* Send no data */).done(
+                          function(data) {
+                             console.log(data);
+                              if (data.status == 1) {
+                                  console.log("Successfully fetched: ", data);
+                                  var brevet_dist = $("select[name='distance']").val(data.result.brevet_dist);
+                                  var datetime = $("input[name='begin_date']").val(data.result.datetime)
+                                  var controls = data.result.controls;
+                                  // We need to know how many items are in the fetched list.
+                                  // Because if we have more rows, we need to delete.
+                                  // If we have fewer rows, we need to add.
+                                  // Again something you won't do in project 5 because you have a fixed
+                                  // number of rows.
+                                  var num_controls = controls.length; 
+                                  
+                                  // For each row in the HTML table
+                                  $('.control').each(function(index) {
+                                      var litem = $(this); // This is our row
+                                      // Clear existing values
+                                      litem.find("input[name='km']").val('');
+                                      litem.find("input[name='open']").val('');
+                                      litem.find("input[name='close']").val('');
+                                      // Check if we're already done?
+                                      if (index < num_controls) {
+                                          litem.find("input[name='km']").val(controls[index].distance);
+                                          litem.find("input[name='open']").val(controls[index].open_time);
+                                          litem.find("input[name='close']").val(controls[index].close_time);
+                                      }
+                                  });
+                              }
+                              else {
+                                  console.log("Fetch failed: ", data);
+                              }
+                           }
+                         ).fail(function(err){
+                           // In case you get an error...
+                           console.log("Error: ", err);
+                         });
+                    }
+                );
+
+               });
+
+         </script>
+      </div>
+   </body>
+</html>

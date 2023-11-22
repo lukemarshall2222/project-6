@@ -1,5 +1,4 @@
 from mongoengine import *
-import datetime
 
 
 class Checkpoint(EmbeddedDocument):

@@ -26,7 +26,7 @@ API_ADDR = os.environ["API_ADDR"]
 API_PORT = os.environ["API_PORT"]
 API_URL = f"http://{API_ADDR}:{API_PORT}/api/"
 
-def get_brevet(_id=None):
+def get_brevet():
     """
     Obtains the newest document in the "brevets" collection in database
     by calling the RESTful API.
@@ -37,27 +37,28 @@ def get_brevet(_id=None):
     # Get documents (rows) in our collection (table),
     # Sort by primary key in descending order and limit to 1 document (row)
     # This will translate into finding the newest inserted document.
-    if _id is None:
-        brevets = requests.get(f"{API_URL}/brevets").json()
-
-        # lists should be a list of dictionaries.
-        # we just need the last one:
-        brevet = brevets[-1]
-        return brevet["length"], brevet["start_time"], brevet["checkpoints"]
-
-def get_brevets():
     brevets = requests.get(f"{API_URL}/brevets").json()
 
     # lists should be a list of dictionaries.
     # we just need the last one:
+    brevet = brevets[-1]
+    return brevet["length"], brevet["start_time"], brevet["checkpoints"]
+
+def get_all_brevets():
+    brevets = requests.get(f"{API_URL}/brevets").json()
+
     return brevets
 
+def get_particular_brevet(id):
+    brevet = requests.get(f"{API_URL}/brevet/?id={id}")
+    return brevet
 
 def insert_brevet(brevet_dist, datetime, controls):
     """
-    Inserts a new to-do list into the database by calling the API.
+    Inserts a new brevet into the database by calling the API.
     
-    Inputs a title (string) and items (list of dictionaries)
+    Inputs a start time (string), total distance (string), and 
+    controls (list[dicts]) for a brevet
     """
 
     _id = requests.post(f"{API_URL}/brevets", json={"length": brevet_dist,
@@ -116,9 +117,7 @@ def page_not_found(error):
 def insert():
     """
     /insert : inserts a brevet into the database.
-
-    Accepts POST requests ONLY!
-
+    only accepts POST requests.
     JSON interface: gets JSON, responds with JSON
     """
     try:
@@ -129,18 +128,18 @@ def insert():
         
         # Because input_json is a dictionary, we can do this:
         brevet_dist = input_json["brevet_dist"] # Should be a string
-        datetime = input_json["datetime"] # Should be a list of dictionaries
-        controls = input_json["controls"]
+        datetime = input_json["datetime"] # Should be a string
+        controls = input_json["controls"] # Should be a list of dictionaries
         
         todo_id = insert_brevet(brevet_dist, datetime, controls)
 
         return flask.jsonify(result={},
                         message="Inserted!", 
-                        status=1, # This is defined by you. You just read this value in your javascript.
+                        status=1, 
                         mongo_id=todo_id)
     except:
         # The reason for the try and except is to ensure Flask responds with a JSON.
-        # If Flask catches your error, it means you didn't catch it yourself,
+        # If Flask catches any error, it means you didn't catch it yourself,
         # And Flask, by default, returns the error in an HTML.
         # We want /insert to respond with a JSON no matter what!
         return flask.jsonify(result={},
@@ -153,9 +152,7 @@ def insert():
 def fetch():
     """
     /fetch : fetches the newest brevet data from the database.
-
-    Accepts GET requests ONLY!
-
+    Only Accepts GET requests.
     JSON interface: gets JSON, responds with JSON
     """
     try:
@@ -180,7 +177,7 @@ def fetch_all():
     """
     try:
         output = []
-        for brevet in get_brevets():
+        for brevet in get_all_brevets():
             _id = brevet["_id"]["$oid"]
             checkpoints = brevet["checkpoints"]
             length = brevet["length"]
@@ -194,6 +191,18 @@ def fetch_all():
                 result={}, 
                 status=0,
                 message="Something went wrong, couldn't fetch any brevet data!")
+    
+@app.route("/api/brevet/<id>", methods=["GET"])
+def fetch_particular(id):
+    brevet = get_particular_brevet(id)
+    _id = brevet["_id"]["$oid"]
+    checkpoints = brevet["checkpoints"]
+    length = brevet["length"]
+    start_time = brevet["start_time"]
+    result={"id": _id, "brevet_dist": length, "start time": start_time, 
+    "controls": checkpoints}
+    return flask.jsonify(result)
+
 
 
 

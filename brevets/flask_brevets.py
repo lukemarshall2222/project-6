@@ -50,8 +50,14 @@ def get_all_brevets():
     return brevets
 
 def get_particular_brevet(id):
-    brevet = requests.get(f"{API_URL}/brevet/?id={id}")
+    brevet = requests.get(f"{API_URL}/brevet/{id}").json()
     return brevet
+
+def update_brevet(id, brevet_dist, datetime, controls):
+    requests.put(f"{API_URL}/brevet/{id}", json={"length": brevet_dist,
+                                                 "start_time": datetime,
+                                                 "checkpoints": controls}).json()
+    return 
 
 def insert_brevet(brevet_dist, datetime, controls):
     """
@@ -65,6 +71,10 @@ def insert_brevet(brevet_dist, datetime, controls):
                                                      "start_time": datetime,
                                                      "checkpoints": controls}).json()
     return _id
+
+def delete_brevet(id):
+    requests.delete(f"{API_URL}/brevet/{id}")
+    return
 
 
 ###################################################
@@ -168,40 +178,101 @@ def fetch():
                 status=0,
                 message="Something went wrong, couldn't fetch any brevet data!")
     
-@app.route("/api/brevets", methods=["GET"])
-def fetch_all():
+@app.route("/api/brevets", methods=["GET", "POST"])
+def all_brevets():
     """
     /api/brevets: fetches all brevet data from the database
     only accepts get requests when associated with endpoint /api/brevets
     JSON Interface: gets JSON, repsponds with JSON
     """
-    try:
-        output = []
-        for brevet in get_all_brevets():
+    if request.method == "GET": 
+        try:
+            output = []
+            for brevet in get_all_brevets():
+                _id = brevet["_id"]["$oid"]
+                checkpoints = brevet["checkpoints"]
+                length = brevet["length"]
+                start_time = brevet["start_time"]
+                result={"id": _id, "brevet_dist": length, "start time": start_time, 
+                        "controls": checkpoints}
+                output.append(result)
+            return flask.jsonify(output)
+        except:
+            return flask.jsonify(
+                    result={}, 
+                    status=0,
+                    message="Something went wrong, couldn't fetch any brevet data!")
+    if request.method == "POST":
+        try:
+            input_json = request.json
+            # if successful, input_json is automatically parsed into a python dictionary
+            
+            brevet_dist = input_json["brevet_dist"] # Should be a string
+            datetime = input_json["datetime"] # Should be a string
+            controls = input_json["controls"] # Should be a list of dictionaries
+            
+            brevet_id = insert_brevet(brevet_dist, datetime, controls)
+
+            return flask.jsonify(result={},
+                            message="Inserted!", 
+                            status=1, 
+                            mongo_id=brevet_id)
+        except:
+            return flask.jsonify(result={},
+                            message="Oh no! Server error!", 
+                            status=0, 
+                            mongo_id='None')
+
+    
+@app.route("/api/brevet/<id>", methods=["GET", "PUT", "DELETE"])
+def particular_brevet(id):
+    if request.method == "GET":
+        try:
+            brevet = get_particular_brevet(id)
             _id = brevet["_id"]["$oid"]
             checkpoints = brevet["checkpoints"]
             length = brevet["length"]
             start_time = brevet["start_time"]
             result={"id": _id, "brevet_dist": length, "start time": start_time, 
-                    "controls": checkpoints}
-            output.append(result)
-        return flask.jsonify(output)
-    except:
-        return flask.jsonify(
-                result={}, 
-                status=0,
-                message="Something went wrong, couldn't fetch any brevet data!")
-    
-@app.route("/api/brevet/<id>", methods=["GET"])
-def fetch_particular(id):
-    brevet = get_particular_brevet(id)
-    _id = brevet["_id"]["$oid"]
-    checkpoints = brevet["checkpoints"]
-    length = brevet["length"]
-    start_time = brevet["start_time"]
-    result={"id": _id, "brevet_dist": length, "start time": start_time, 
-    "controls": checkpoints}
-    return flask.jsonify(result)
+            "controls": checkpoints}
+            return flask.jsonify(result)
+        except:
+            return flask.jsonify(
+                    result={}, 
+                    status=0,
+                    message="Something went wrong, couldn't fetch any brevet data!")
+    elif request.method == "PUT":
+        try:
+            input_json = request.json
+            # if successful, input_json is automatically parsed into a python dictionary
+            
+            brevet_dist = input_json["brevet_dist"] # Should be a string
+            datetime = input_json["datetime"] # Should be a string
+            controls = input_json["controls"] # Should be a list of dictionaries
+            update_brevet(id, brevet_dist, datetime, controls)
+            return flask.jsonify(
+                result={},
+                status=1,
+                message=f"Successfully updated brevet with id {id}")
+        except:
+            return flask.jsonify(
+                    result={}, 
+                    status=0,
+                    message="Something went wrong, couldn't update any brevet data!")
+            
+    elif request.method == "DELETE":
+        try:
+            delete_brevet(id)
+            return flask.jsonify(
+                result={},
+                status=1,
+                message=f"Successfully deleted brevet with id {id}")
+        except:
+            return flask.jsonify(
+                    result={}, 
+                    status=0,
+                    message="Something went wrong, couldn't update any brevet data!")
+
 
 
 
